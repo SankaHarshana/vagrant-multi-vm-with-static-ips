@@ -11,13 +11,13 @@ BUILD_MODE = "BRIDGE"
 
 # Define the number of worker nodes
 # If this number is changed, remember to update setup-hosts.sh script with the new hosts IP details in /etc/hosts of each VM.
-NUM_WORKER_NODES = 0
+NUM_WORKER_NODES = 1
 NUM_MASTER_NODES = 1
 NUM_LBS = 0
 
 
-IP_NW = "192.168.1"
-MASTER_IP_START = 11
+IP_NW = "192.168.8"
+MASTER_IP_START = 10
 NODE_IP_START = 20
 LB_IP_START = 30
 
@@ -43,6 +43,7 @@ module OS
     RUBY_ENGINE == "jruby"
   end
 end
+
 
 # Determine host adpater for bridging in BRIDGE mode
 def get_bridge_adapter()
@@ -132,28 +133,6 @@ Vagrant.configure("2") do |config|
   # `vagrant box outdated`. This is not recommended.
   config.vm.box_check_update = false
 
-  # # Provision Master Nodes
-  # config.vm.define "controlplane" do |node|
-  #   # Name shown in the GUI
-  #   node.vm.provider "virtualbox" do |vb|
-  #     vb.name = "controlplane"
-  #     vb.memory = 2048
-  #     vb.cpus = 2
-  #   end
-  #   node.vm.hostname = "controlplane"
-  #   if BUILD_MODE == "BRIDGE"
-  #     adapter = ""
-  #     node.vm.network :public_network, bridge: get_bridge_adapter()
-  #   else
-  #     node.vm.network :private_network, ip: IP_NW + ".#{MASTER_IP_START}"
-  #     node.vm.network "forwarded_port", guest: 22, host: "#{2710}"
-  #   end
-  #   provision_kubernetes_node node
-  #   # Install (opinionated) configs for vim and tmux on master-1. These used by the author for CKA exam.
-  #   node.vm.provision "file", source: "./ubuntu/tmux.conf", destination: "$HOME/.tmux.conf"
-  #   node.vm.provision "file", source: "./ubuntu/vimrc", destination: "$HOME/.vimrc"
-  # end
-
 
   # Provision Master Nodes
   (1..NUM_MASTER_NODES).each do |i|
@@ -185,58 +164,58 @@ Vagrant.configure("2") do |config|
   end
 
   # Provision Worker Nodes
-  # (1..NUM_WORKER_NODES).each do |i|
-  #   config.vm.define "worker-#{i}" do |node|
-  #     node.vm.provider "virtualbox" do |vb|
-  #       vb.name = "worker-#{i}"
-  #       vb.memory = 1024
-  #       vb.cpus = 1
-  #     end
-  #     node.vm.hostname = "worker-#{i}"
-  #     if BUILD_MODE == "BRIDGE"
-  #       node.vm.network :public_network, bridge: get_bridge_adapter(), ip: IP_NW + ".#{NODE_IP_START + i}"
-  #     else
-  #       node.vm.network :private_network, ip: IP_NW + ".#{NODE_IP_START + i}"
-  #       node.vm.network "forwarded_port", guest: 22, host: "#{2720 + i}"
-  #     end
-  #     node.vm.provision "shell", inline: <<-SHELL
-  #       interface_name=$(ip addr show | grep 'link/ether' | awk '{print $2}' | head -n 1)
-  #       # Configure static IP
-  #       ip addr add #{IP_NW}.#{NODE_IP_START + i}/24 dev $interface_name 
-  #       ip route add default via #{IP_NW}.1
-  #       echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
-  #       sysctl -p
-  #     SHELL
-  #     provision_kubernetes_node node
-  #   end
-  # end
+  (1..NUM_WORKER_NODES).each do |i|
+    config.vm.define "worker-#{i}" do |node|
+      node.vm.provider "virtualbox" do |vb|
+        vb.name = "worker-#{i}"
+        vb.memory = 1024
+        vb.cpus = 1
+      end
+      node.vm.hostname = "worker-#{i}"
+      if BUILD_MODE == "BRIDGE"
+        node.vm.network :public_network, bridge: get_bridge_adapter(), ip: IP_NW + ".#{NODE_IP_START + i}"
+      else
+        node.vm.network :private_network, ip: IP_NW + ".#{NODE_IP_START + i}"
+        node.vm.network "forwarded_port", guest: 22, host: "#{2720 + i}"
+      end
+      node.vm.provision "shell", inline: <<-SHELL
+        interface_name=$(ip addr show | grep 'link/ether' | awk '{print $2}' | head -n 1)
+        # Configure static IP
+        ip addr add #{IP_NW}.#{NODE_IP_START + i}/24 dev $interface_name 
+        ip route add default via #{IP_NW}.1
+        echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
+        sysctl -p
+      SHELL
+      provision_kubernetes_node node
+    end
+  end
 
   # Provision Load balancers
-  # (1..NUM_LBS).each do |i|
-  #   config.vm.define "lb-#{i}" do |node|
-  #     node.vm.provider "virtualbox" do |vb|
-  #       vb.name = "lb-#{i}"
-  #       vb.memory = 512
-  #       vb.cpus = 1
-  #     end
-  #     node.vm.hostname = "lb-#{i}"
-  #     if BUILD_MODE == "BRIDGE"
-  #       node.vm.network :public_network, bridge: get_bridge_adapter(), ip: IP_NW + ".#{LB_IP_START + i}"
-  #     else
-  #       node.vm.network :private_network, ip: IP_NW + ".#{LB_IP_START + i}"
-  #       node.vm.network "forwarded_port", guest: 22, host: "#{2730 + i}"
-  #     end
-  #     node.vm.provision "shell", inline: <<-SHELL
-  #       interface_name=$(ip addr show | grep 'link/ether' | awk '{print $2}' | head -n 1)
-  #       # Configure static IP
-  #       ip addr add #{IP_NW}.#{LB_IP_START + i}/24 dev $interface_name 
-  #       ip route add default via #{IP_NW}.1
-  #       echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
-  #       sysctl -p
-  #     SHELL
-  #     provision_kubernetes_node node
-  #   end
-  # end
+  (1..NUM_LBS).each do |i|
+    config.vm.define "lb-#{i}" do |node|
+      node.vm.provider "virtualbox" do |vb|
+        vb.name = "lb-#{i}"
+        vb.memory = 512
+        vb.cpus = 1
+      end
+      node.vm.hostname = "lb-#{i}"
+      if BUILD_MODE == "BRIDGE"
+        node.vm.network :public_network, bridge: get_bridge_adapter(), ip: IP_NW + ".#{LB_IP_START + i}"
+      else
+        node.vm.network :private_network, ip: IP_NW + ".#{LB_IP_START + i}"
+        node.vm.network "forwarded_port", guest: 22, host: "#{2730 + i}"
+      end
+      node.vm.provision "shell", inline: <<-SHELL
+        interface_name=$(ip addr show | grep 'link/ether' | awk '{print $2}' | head -n 1)
+        # Configure static IP
+        ip addr add #{IP_NW}.#{LB_IP_START + i}/24 dev $interface_name 
+        ip route add default via #{IP_NW}.1
+        echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
+        sysctl -p
+      SHELL
+      provision_kubernetes_node node
+    end
+  end
 
 
 
@@ -257,19 +236,14 @@ Vagrant.configure("2") do |config|
             nodes.push("master-#{i}")
             ips.push(IP_NW + ".#{MASTER_IP_START + i}")
           end
-          # (1..NUM_WORKER_NODES).each do |i|
-          #   nodes.push("worker-#{i}")
-          #   ips.push(IP_NW + ".#{NODE_IP_START + i}")
-          # end
-          # (1..NUM_LBS).each do |i|
-          #   nodes.push("lb-#{i}")
-          #   ips.push(IP_NW + ".#{LB_IP_START + i}")
-          # end
-
-          # nodes.each do |n|
-          #   # ips.push(%x{vagrant ssh #{n} -c 'public-ip'}.chomp)
-          #   ips.push(%x{vagrant ssh #{n} -c " hostname -I | awk '{print $2}' "}.chomp)
-          # end
+          (1..NUM_WORKER_NODES).each do |i|
+            nodes.push("worker-#{i}")
+            ips.push(IP_NW + ".#{NODE_IP_START + i}")
+          end
+          (1..NUM_LBS).each do |i|
+            nodes.push("lb-#{i}")
+            ips.push(IP_NW + ".#{LB_IP_START + i}")
+          end
 
 
           hosts = ""
@@ -284,28 +258,11 @@ Vagrant.configure("2") do |config|
           end
           File.delete("hosts.tmp")
           puts <<~EOF
-
                  VM build complete!
-
-                 Use either of the following to access any NodePort services you create from your browser
-                 replacing "port_number" with the number of your NodePort.
-
                EOF
-          (1..NUM_WORKER_NODES).each do |i|
-            puts "  http://#{ips[i]}:port_number"
-          end
-          # (1..NUM_MASTER_NODES).each do |i|
-          #   puts "  http://#{ips[i]}:port_number"
-          # end
-          # (1..NUM_LBS).each do |i|
-          #   puts "  http://#{ips[i]}:port_number"
-          # end
-          puts ""
         else
           puts "    Nothing to do here"
         end
-
-
       end
     end
   end
